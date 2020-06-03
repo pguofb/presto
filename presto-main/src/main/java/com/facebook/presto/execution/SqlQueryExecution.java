@@ -383,6 +383,7 @@ public class SqlQueryExecution
         Optional<Output> output = new OutputExtractor().extractOutput(plan.getRoot());
         stateMachine.setOutput(output);
 
+        
         // fragment the plan
         SubPlan fragmentedPlan = planFragmenter.createSubPlans(stateMachine.getSession(), plan, false, idAllocator, stateMachine.getWarningCollector());
 
