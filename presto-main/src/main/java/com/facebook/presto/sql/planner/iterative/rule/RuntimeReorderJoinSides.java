@@ -18,12 +18,15 @@ import com.facebook.airlift.log.Logger;
 import com.facebook.presto.cost.StatsProvider;
 import com.facebook.presto.matching.Captures;
 import com.facebook.presto.matching.Pattern;
+import com.facebook.presto.metadata.Metadata;
+import com.facebook.presto.spi.Constraint;
 import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.plan.TableScanNode;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import com.facebook.presto.sql.planner.iterative.Rule;
 import com.facebook.presto.sql.planner.plan.ExchangeNode;
 import com.facebook.presto.sql.planner.plan.JoinNode;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 
 import java.util.List;
@@ -50,6 +53,13 @@ public class RuntimeReorderJoinSides
 
     private static final Pattern<JoinNode> PATTERN = join();
 
+    private final Metadata metadata;
+
+    public RuntimeReorderJoinSides(Metadata metadata)
+    {
+        this.metadata = metadata;
+    }
+
     @Override
     public Pattern<JoinNode> getPattern()
     {
@@ -66,9 +76,35 @@ public class RuntimeReorderJoinSides
             return Result.empty();
         }
 
-        StatsProvider statsProvider = context.getStatsProvider();
-        double leftOutputSizeInBytes = statsProvider.getStats(joinNode.getLeft()).getOutputSizeInBytes(joinNode.getLeft().getOutputVariables());
-        double rightOutputSizeInBytes = statsProvider.getStats(joinNode.getRight()).getOutputSizeInBytes(joinNode.getRight().getOutputVariables());
+        double leftOutputSizeInBytes = Double.NaN;
+        double rightOutputSizeInBytes = Double.NaN;
+        PlanNode actualLeft = context.getLookup().resolve(joinNode.getLeft());
+        PlanNode actualRight = context.getLookup().resolve(joinNode.getRight());
+        if (actualLeft instanceof TableScanNode && actualRight instanceof ExchangeNode && actualRight.getSources().size() == 1
+                && context.getLookup().resolve(actualRight.getSources().get(0)) instanceof TableScanNode) {
+            // Simple plan is characterized as Join[leftSrc: TableScan, rightSrc: Exchange[src: TableScan]].
+            // For simple plans, directly fetch the overall table sizes as the size of the join sides to have
+            // accurate input bytes statistics and meanwhile avoid non-negligible cost of collecting and processing
+            // per-column statistics.
+            TableScanNode leftScan = (TableScanNode) actualLeft;
+            TableScanNode rightScan = (TableScanNode) context.getLookup().resolve(actualRight.getSources().get(0));
+            leftOutputSizeInBytes = metadata.getTableStatistics(context.getSession(),
+                    leftScan.getTable(),
+                    ImmutableList.copyOf(leftScan.getAssignments().values()),
+                    new Constraint<>(leftScan.getCurrentConstraint())).getTotalSize().getValue();
+            rightOutputSizeInBytes = metadata.getTableStatistics(context.getSession(),
+                    rightScan.getTable(),
+                    ImmutableList.copyOf(rightScan.getAssignments().values()),
+                    new Constraint<>(rightScan.getCurrentConstraint())).getTotalSize().getValue();
+        }
+
+        // Fall back using statsProvider to estimate left and right output size.
+        if (Double.isNaN(leftOutputSizeInBytes) || Double.isNaN(rightOutputSizeInBytes)) {
+            StatsProvider statsProvider = context.getStatsProvider();
+            leftOutputSizeInBytes = statsProvider.getStats(joinNode.getLeft()).getOutputSizeInBytes(joinNode.getLeft().getOutputVariables());
+            rightOutputSizeInBytes = statsProvider.getStats(joinNode.getRight()).getOutputSizeInBytes(joinNode.getRight().getOutputVariables());
+        }
+
         if (Double.isNaN(leftOutputSizeInBytes) || Double.isNaN(rightOutputSizeInBytes)) {
             return Result.empty();
         }

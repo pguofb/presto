@@ -589,7 +589,7 @@ public class PlanOptimizers
                 statsCalculator,
                 costCalculator,
                 ImmutableList.of(),
-                ImmutableSet.of(new RuntimeReorderJoinSides())));
+                ImmutableSet.of(new RuntimeReorderJoinSides(metadata))));
         this.runtimeOptimizers = runtimeBuilder.build();
     }
 

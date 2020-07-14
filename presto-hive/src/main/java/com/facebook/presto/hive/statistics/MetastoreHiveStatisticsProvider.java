@@ -158,6 +158,7 @@ public class MetastoreHiveStatisticsProvider
     {
         TableStatistics.Builder result = TableStatistics.builder();
         result.setRowCount(Estimate.of(0));
+        result.setTotalSize(Estimate.of(0));
         columns.forEach((columnName, columnHandle) -> {
             Type columnType = columnTypes.get(columnName);
             verify(columnType != null, "columnType is missing for column: %s", columnName);
@@ -404,6 +405,15 @@ public class MetastoreHiveStatisticsProvider
 
         TableStatistics.Builder result = TableStatistics.builder();
         result.setRowCount(Estimate.of(rowCount));
+
+        OptionalDouble optionalAverageSizePerPartition = calculateAverageSizePerPartition(statistics.values());
+        if (optionalAverageSizePerPartition.isPresent()) {
+            double averageSizePerPartition = optionalAverageSizePerPartition.getAsDouble();
+            verify(averageSizePerPartition >= 0, "averageSizePerPartition must be greater than or equal to zero");
+            double totalSize = averageSizePerPartition * queriedPartitionsCount;
+            result.setTotalSize(Estimate.of(totalSize));
+        }
+
         for (Map.Entry<String, ColumnHandle> column : columns.entrySet()) {
             String columnName = column.getKey();
             HiveColumnHandle columnHandle = (HiveColumnHandle) column.getValue();
@@ -426,6 +436,18 @@ public class MetastoreHiveStatisticsProvider
         return statistics.stream()
                 .map(PartitionStatistics::getBasicStatistics)
                 .map(HiveBasicStatistics::getRowCount)
+                .filter(OptionalLong::isPresent)
+                .mapToLong(OptionalLong::getAsLong)
+                .peek(count -> verify(count >= 0, "count must be greater than or equal to zero"))
+                .average();
+    }
+
+    @VisibleForTesting
+    static OptionalDouble calculateAverageSizePerPartition(Collection<PartitionStatistics> statistics)
+    {
+        return statistics.stream()
+                .map(PartitionStatistics::getBasicStatistics)
+                .map(HiveBasicStatistics::getInMemoryDataSizeInBytes)
                 .filter(OptionalLong::isPresent)
                 .mapToLong(OptionalLong::getAsLong)
                 .peek(count -> verify(count >= 0, "count must be greater than or equal to zero"))
