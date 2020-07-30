@@ -56,7 +56,8 @@ public class StatsNormalizer
             return PlanNodeStatsEstimate.unknown();
         }
 
-        PlanNodeStatsEstimate.Builder normalized = PlanNodeStatsEstimate.buildFrom(stats);
+        PlanNodeStatsEstimate.Builder normalized = PlanNodeStatsEstimate.buildFrom(stats)
+                .setTotalSize(stats.getTotalSize());
 
         Predicate<VariableReferenceExpression> variableFilter = outputVariables
                 .map(ImmutableSet::copyOf)
@@ -66,6 +67,8 @@ public class StatsNormalizer
         for (VariableReferenceExpression variable : stats.getVariablesWithKnownStatistics()) {
             if (!variableFilter.test(variable)) {
                 normalized.removeVariableStatistics(variable);
+                // discard the totalSize statistics when columns change.
+                normalized.setTotalSize(NaN);
                 continue;
             }
 
@@ -73,6 +76,7 @@ public class StatsNormalizer
             VariableStatsEstimate normalizedSymbolStats = stats.getOutputRowCount() == 0 ? VariableStatsEstimate.zero() : normalizeVariableStats(variable, variableStats, stats);
             if (normalizedSymbolStats.isUnknown()) {
                 normalized.removeVariableStatistics(variable);
+                normalized.setTotalSize(NaN);
                 continue;
             }
             if (!Objects.equals(normalizedSymbolStats, variableStats)) {

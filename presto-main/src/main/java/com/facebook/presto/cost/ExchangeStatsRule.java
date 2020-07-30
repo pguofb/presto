@@ -24,10 +24,13 @@ import com.facebook.presto.sql.planner.plan.ExchangeNode;
 import java.util.List;
 import java.util.Optional;
 
+import static com.facebook.presto.cost.PlanNodeStatsEstimate.buildFrom;
 import static com.facebook.presto.cost.PlanNodeStatsEstimateMath.addStatsAndMaxDistinctValues;
 import static com.facebook.presto.sql.planner.plan.Patterns.exchange;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
+import static java.lang.Double.NaN;
+import static java.lang.Double.isNaN;
 
 public class ExchangeStatsRule
         extends SimpleStatsRule<ExchangeNode>
@@ -49,9 +52,11 @@ public class ExchangeStatsRule
     protected Optional<PlanNodeStatsEstimate> doCalculate(ExchangeNode node, StatsProvider statsProvider, Lookup lookup, Session session, TypeProvider types)
     {
         Optional<PlanNodeStatsEstimate> estimate = Optional.empty();
+        double totalSize = 0;
         for (int i = 0; i < node.getSources().size(); i++) {
             PlanNode source = node.getSources().get(i);
             PlanNodeStatsEstimate sourceStats = statsProvider.getStats(source);
+            totalSize = (!isNaN(sourceStats.getTotalSize()) && !isNaN(totalSize)) ? totalSize + sourceStats.getTotalSize() : NaN;
 
             PlanNodeStatsEstimate sourceStatsWithMappedSymbols = mapToOutputVariables(sourceStats, node.getInputs().get(i), node.getOutputVariables());
 
@@ -64,7 +69,9 @@ public class ExchangeStatsRule
         }
 
         verify(estimate.isPresent());
-        return estimate;
+        return Optional.of(buildFrom(estimate.get())
+                .setTotalSize(totalSize)
+                .build());
     }
 
     private PlanNodeStatsEstimate mapToOutputVariables(PlanNodeStatsEstimate estimate, List<VariableReferenceExpression> inputs, List<VariableReferenceExpression> outputs)

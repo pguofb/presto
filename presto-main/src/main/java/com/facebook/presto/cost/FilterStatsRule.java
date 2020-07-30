@@ -23,9 +23,12 @@ import java.util.Optional;
 
 import static com.facebook.presto.SystemSessionProperties.isDefaultFilterFactorEnabled;
 import static com.facebook.presto.cost.FilterStatsCalculator.UNKNOWN_FILTER_COEFFICIENT;
+import static com.facebook.presto.cost.PlanNodeStatsEstimate.buildFrom;
 import static com.facebook.presto.sql.planner.plan.Patterns.filter;
 import static com.facebook.presto.sql.relational.OriginalExpressionUtils.castToExpression;
 import static com.facebook.presto.sql.relational.OriginalExpressionUtils.isExpression;
+import static java.lang.Double.NaN;
+import static java.lang.Double.isNaN;
 
 public class FilterStatsRule
         extends SimpleStatsRule<FilterNode>
@@ -60,6 +63,12 @@ public class FilterStatsRule
         if (isDefaultFilterFactorEnabled(session) && estimate.isOutputRowCountUnknown()) {
             estimate = sourceStats.mapOutputRowCount(sourceRowCount -> sourceStats.getOutputRowCount() * UNKNOWN_FILTER_COEFFICIENT);
         }
-        return Optional.of(estimate);
+        double sourceRowCount = sourceStats.getOutputRowCount();
+        double sourceTotalSize = sourceStats.getTotalSize();
+        double filteredRowCount = estimate.getOutputRowCount();
+        double filteredSize = (isNaN(filteredRowCount) || isNaN(sourceRowCount) || isNaN(sourceTotalSize) || sourceRowCount == 0) ? NaN : filteredRowCount / sourceRowCount * sourceTotalSize;
+        return Optional.of(buildFrom(estimate)
+                .setTotalSize(filteredSize)
+                .build());
     }
 }

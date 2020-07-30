@@ -15,6 +15,7 @@
 package com.facebook.presto.cost;
 
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
+import com.fasterxml.jackson.core.sym.NameN;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -22,6 +23,7 @@ import org.testng.annotations.Test;
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.sql.planner.iterative.rule.test.PlanBuilder.expression;
 import static com.facebook.presto.testing.TestingSession.testSessionBuilder;
+import static java.lang.Double.NaN;
 
 public class TestFilterStatsRule
         extends BaseStatsCalculatorTest
@@ -52,6 +54,7 @@ public class TestFilterStatsRule
                         pb.values(pb.variable("i1", BIGINT), pb.variable("i2", BIGINT), pb.variable("i3", BIGINT))))
                 .withSourceStats(0, PlanNodeStatsEstimate.builder()
                         .setOutputRowCount(10)
+                        .setTotalSize(40)
                         .addVariableStatistics(new VariableReferenceExpression("i1", BIGINT), VariableStatsEstimate.builder()
                                 .setLowValue(1)
                                 .setHighValue(10)
@@ -73,6 +76,7 @@ public class TestFilterStatsRule
                         .build())
                 .check(check -> check
                         .outputRowsCount(2)
+                        .totalSize(8)
                         .variableStats(new VariableReferenceExpression("i1", BIGINT), assertion -> assertion
                                 .lowValue(5)
                                 .highValue(5)
@@ -97,6 +101,7 @@ public class TestFilterStatsRule
                         pb.values(pb.variable("i1", BIGINT), pb.variable("i2", BIGINT), pb.variable("i3", BIGINT))))
                 .withSourceStats(0, PlanNodeStatsEstimate.builder()
                         .setOutputRowCount(10)
+                        .setTotalSize(40)
                         .addVariableStatistics(new VariableReferenceExpression("i1", BIGINT), VariableStatsEstimate.builder()
                                 .setLowValue(1)
                                 .setHighValue(10)
@@ -118,6 +123,7 @@ public class TestFilterStatsRule
                         .build())
                 .check(check -> check
                         .outputRowsCount(2)
+                        .totalSize(8)
                         .variableStats(new VariableReferenceExpression("i1", BIGINT), assertion -> assertion
                                 .lowValue(5)
                                 .highValue(5)
@@ -148,6 +154,7 @@ public class TestFilterStatsRule
                                 pb.values(pb.variable("i1", BIGINT), pb.variable("i2", BIGINT), pb.variable("i3", BIGINT))))
                 .withSourceStats(0, PlanNodeStatsEstimate.builder()
                         .setOutputRowCount(10)
+                        .setTotalSize(40)
                         .addVariableStatistics(new VariableReferenceExpression("i1", BIGINT), VariableStatsEstimate.builder()
                                 .setLowValue(1)
                                 .setHighValue(10)
@@ -167,7 +174,7 @@ public class TestFilterStatsRule
                                 .setNullsFraction(0.1)
                                 .build())
                         .build())
-                .check(check -> check.outputRowsCountUnknown());
+                .check(check -> check.outputRowsCountUnknown().totalSize(NaN));
 
         // can't estimate function, but default filter factor is turned on
         defaultFilterTester.assertStatsFor(pb -> pb
@@ -175,6 +182,7 @@ public class TestFilterStatsRule
                         pb.values(pb.variable("i1", BIGINT), pb.variable("i2", BIGINT), pb.variable("i3", BIGINT))))
                 .withSourceStats(0, PlanNodeStatsEstimate.builder()
                         .setOutputRowCount(10)
+                        .setTotalSize(40)
                         .addVariableStatistics(new VariableReferenceExpression("i1", BIGINT), VariableStatsEstimate.builder()
                                 .setLowValue(1)
                                 .setHighValue(10)
@@ -196,6 +204,7 @@ public class TestFilterStatsRule
                         .build())
                 .check(check -> check
                         .outputRowsCount(9)
+                        .totalSize(36)
                         .variableStats(new VariableReferenceExpression("i1", BIGINT), assertion -> assertion
                                 .lowValue(1)
                                 .highValue(10)
